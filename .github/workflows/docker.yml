@@ -24,7 +24,7 @@ env:
 jobs:
   build-amd64:
     name: Build Docker Image for amd64
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Docker meta
         id: meta
@@ -76,7 +76,7 @@ jobs:
 
   build-arm64:
     name: Build Docker Image for arm64
-    runs-on: ubuntu-latest-arm
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Docker meta
         id: meta
@@ -127,7 +127,7 @@ jobs:
           retention-days: 1
 
   merge:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - build-amd64
       - build-arm64
