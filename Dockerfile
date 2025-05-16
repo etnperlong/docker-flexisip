@@ -87,7 +87,7 @@ RUN git clone https://gitlab.linphone.org/BC/public/flexisip.git /flexisip && \
 # Build debian package
 WORKDIR /flexisip
 RUN export CC="ccache clang" && export CXX="ccache clang++" && \
-  cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DENABLE_UNIT_TESTS=OFF && \
+  cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DENABLE_UNIT_TESTS=OFF -DCPACK_GENERATOR=DEB && \
   cmake --build build -j$(nproc) --target package
 
 ##############
@@ -102,11 +102,8 @@ RUN apt-get -y update \
   && apt-get -y clean \
   && rm -rf /var/lib/apt/lists/*
 
-# Generate default config file for flexisip
-RUN flexisip --dump-default all > /usr/local/etc/flexisip/flexisip.conf
-
 EXPOSE 5060/udp
 EXPOSE 5060/tcp
-VOLUME [ "/usr/local/etc/flexisip" ]
+VOLUME [ "/usr/local/etc/flexisip", "/usr/local/var/log/flexisip" ]
 
 ENTRYPOINT [ "flexisip" ]
