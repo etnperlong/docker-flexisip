@@ -1,0 +1,274 @@
+name: Auto Check Upstream
+
+on:
+  schedule:
+    # Run every day at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      channels:
+        type: choice
+        description: 'Channels to check'
+        required: false
+        default: 'all'
+        options:
+          - all
+          - stable
+          - alpha
+          - beta
+
+env:
+  GITLAB_PROJECT_ID: 'BC%2Fpublic%2Fflexisip'
+
+jobs:
+  check-versions:
+    name: Check Upstream Versions
+    runs-on: ubuntu-24.04
+    outputs:
+      build_matrix: ${{ steps.prepare.outputs.build_matrix }}
+      has_builds: ${{ steps.prepare.outputs.has_builds }}
+    steps:
+      - name: Fetch current state from Variables
+        id: current-state
+        run: |
+          # Read current state from repository variables
+          CURRENT_STABLE="${{ vars.FLEXISIP_STABLE_VERSION }}"
+          CURRENT_ALPHA="${{ vars.FLEXISIP_ALPHA_VERSION }}"
+          CURRENT_BETA="${{ vars.FLEXISIP_BETA_VERSION }}"
+
+          echo "current_stable=${CURRENT_STABLE:-}" >> $GITHUB_OUTPUT
+          echo "current_alpha=${CURRENT_ALPHA:-}" >> $GITHUB_OUTPUT
+          echo "current_beta=${CURRENT_BETA:-}" >> $GITHUB_OUTPUT
+
+          echo "Current versions:"
+          echo "  Stable: ${CURRENT_STABLE:-none}"
+          echo "  Alpha: ${CURRENT_ALPHA:-none}"
+          echo "  Beta: ${CURRENT_BETA:-none}"
+
+      - name: Fetch upstream tags and compare
+        id: check
+        run: |
+          # Determine which channels to check
+          CHANNELS="${{ inputs.channels || 'all' }}"
+          echo "Requested channels: $CHANNELS"
+
+          CHECK_STABLE=false
+          CHECK_ALPHA=false
+          CHECK_BETA=false
+
+          case "$CHANNELS" in
+            "all")
+              CHECK_STABLE=true
+              CHECK_ALPHA=true
+              CHECK_BETA=true
+              ;;
+            "stable")
+              CHECK_STABLE=true
+              ;;
+            "alpha")
+              CHECK_ALPHA=true
+              ;;
+            "beta")
+              CHECK_BETA=true
+              ;;
+          esac
+
+          echo "Checking channels - stable:$CHECK_STABLE alpha:$CHECK_ALPHA beta:$CHECK_BETA"
+
+          # Fetch all tags from GitLab
+          echo "Fetching tags from GitLab..."
+          TAGS=$(curl -s "https://gitlab.linphone.org/api/v4/projects/${{ env.GITLAB_PROJECT_ID }}/repository/tags?per_page=100" | jq -r '.[].name')
+
+          if [[ -z "$TAGS" ]]; then
+            echo "Error: Failed to fetch tags from GitLab"
+            exit 1
+          fi
+
+          echo "Found $(echo "$TAGS" | wc -l) tags"
+
+          # Find latest versions for each channel
+          LATEST_STABLE=""
+          LATEST_ALPHA=""
+          LATEST_BETA=""
+
+          while IFS= read -r tag; do
+            # Skip empty lines
+            [[ -z "$tag" ]] && continue
+
+            # Filter by channel
+            if [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              # Stable version (no suffix)
+              if [[ -z "$LATEST_STABLE" ]] || [[ "$(printf '%s\n' "$LATEST_STABLE" "$tag" | sort -V | tail -n1)" == "$tag" ]]; then
+                LATEST_STABLE="$tag"
+              fi
+            elif [[ "$tag" =~ -alpha ]]; then
+              # Alpha version
+              if [[ -z "$LATEST_ALPHA" ]] || [[ "$(printf '%s\n' "$LATEST_ALPHA" "$tag" | sort -V | tail -n1)" == "$tag" ]]; then
+                LATEST_ALPHA="$tag"
+              fi
+            elif [[ "$tag" =~ -beta ]]; then
+              # Beta version
+              if [[ -z "$LATEST_BETA" ]] || [[ "$(printf '%s\n' "$LATEST_BETA" "$tag" | sort -V | tail -n1)" == "$tag" ]]; then
+                LATEST_BETA="$tag"
+              fi
+            fi
+          done <<< "$TAGS"
+
+          echo "Latest versions found:"
+          echo "  Stable: ${LATEST_STABLE:-none}"
+          echo "  Alpha: ${LATEST_ALPHA:-none}"
+          echo "  Beta: ${LATEST_BETA:-none}"
+
+          # Set outputs
+          echo "latest_stable=${LATEST_STABLE}" >> $GITHUB_OUTPUT
+          echo "latest_alpha=${LATEST_ALPHA}" >> $GITHUB_OUTPUT
+          echo "latest_beta=${LATEST_BETA}" >> $GITHUB_OUTPUT
+          echo "check_stable=${CHECK_STABLE}" >> $GITHUB_OUTPUT
+          echo "check_alpha=${CHECK_ALPHA}" >> $GITHUB_OUTPUT
+          echo "check_beta=${CHECK_BETA}" >> $GITHUB_OUTPUT
+
+      - name: Prepare build matrix
+        id: prepare
+        run: |
+          CURRENT_STABLE="${{ steps.current-state.outputs.current_stable }}"
+          CURRENT_ALPHA="${{ steps.current-state.outputs.current_alpha }}"
+          CURRENT_BETA="${{ steps.current-state.outputs.current_beta }}"
+
+          LATEST_STABLE="${{ steps.check.outputs.latest_stable }}"
+          LATEST_ALPHA="${{ steps.check.outputs.latest_alpha }}"
+          LATEST_BETA="${{ steps.check.outputs.latest_beta }}"
+
+          CHECK_STABLE="${{ steps.check.outputs.check_stable }}"
+          CHECK_ALPHA="${{ steps.check.outputs.check_alpha }}"
+          CHECK_BETA="${{ steps.check.outputs.check_beta }}"
+
+          # Build matrix JSON
+          MATRIX_INCLUDE="[]"
+
+          # Check stable
+          if [[ "$CHECK_STABLE" == "true" ]] && [[ -n "$LATEST_STABLE" ]] && [[ "$LATEST_STABLE" != "$CURRENT_STABLE" ]]; then
+            echo "✅ Stable version needs build: $CURRENT_STABLE -> $LATEST_STABLE"
+            MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. += [{"channel": "stable", "version": "'"$LATEST_STABLE"'", "tag_latest": true}]')
+          fi
+
+          # Check alpha
+          if [[ "$CHECK_ALPHA" == "true" ]] && [[ -n "$LATEST_ALPHA" ]] && [[ "$LATEST_ALPHA" != "$CURRENT_ALPHA" ]]; then
+            echo "✅ Alpha version needs build: $CURRENT_ALPHA -> $LATEST_ALPHA"
+            MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. += [{"channel": "alpha", "version": "'"$LATEST_ALPHA"'", "tag_latest": false}]')
+          fi
+
+          # Check beta
+          if [[ "$CHECK_BETA" == "true" ]] && [[ -n "$LATEST_BETA" ]] && [[ "$LATEST_BETA" != "$CURRENT_BETA" ]]; then
+            echo "✅ Beta version needs build: $CURRENT_BETA -> $LATEST_BETA"
+            MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. += [{"channel": "beta", "version": "'"$LATEST_BETA"'", "tag_latest": false}]')
+          fi
+
+          # Check if we have any builds
+          BUILD_COUNT=$(echo "$MATRIX_INCLUDE" | jq 'length')
+          if [[ "$BUILD_COUNT" -gt 0 ]]; then
+            echo "has_builds=true" >> $GITHUB_OUTPUT
+            echo "Found $BUILD_COUNT version(s) to build"
+          else
+            echo "has_builds=false" >> $GITHUB_OUTPUT
+            echo "No new versions to build"
+          fi
+
+          # Output matrix
+          MATRIX_JSON=$(jq -c -n --argjson include "$MATRIX_INCLUDE" '{"include": $include}')
+          echo "build_matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
+          echo "Matrix JSON:"
+          echo "$MATRIX_JSON" | jq '.'
+
+  build-versions:
+    name: Build ${{ matrix.channel }} (${{ matrix.version }})
+    needs: check-versions
+    if: needs.check-versions.outputs.has_builds == 'true'
+    strategy:
+      matrix: ${{ fromJson(needs.check-versions.outputs.build_matrix) }}
+      fail-fast: false
+    uses: ./.github/workflows/build-docker.yml
+    with:
+      flexisip_version: ${{ matrix.version }}
+      channel: ${{ matrix.channel }}
+      tag_latest: ${{ matrix.tag_latest }}
+    secrets: inherit
+
+  update-state:
+    name: Update Build State
+    needs: [check-versions, build-versions]
+    if: always() && needs.check-versions.outputs.has_builds == 'true' && needs.build-versions.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Update GitHub Variables
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Parse matrix to get version info
+          MATRIX='${{ needs.check-versions.outputs.build_matrix }}'
+          echo "Processing build results..."
+          echo "$MATRIX" | jq '.'
+
+          echo "✅ All builds completed successfully, updating variables..."
+
+          # Update variables for each successful build
+          echo "$MATRIX" | jq -r '.include[] | "\(.channel)=\(.version)"' | while IFS='=' read -r channel version; do
+            case "$channel" in
+              "stable")
+                echo "Updating FLEXISIP_STABLE_VERSION to $version"
+                gh variable set FLEXISIP_STABLE_VERSION --body "$version" --repo ${{ github.repository }}
+                ;;
+              "alpha")
+                echo "Updating FLEXISIP_ALPHA_VERSION to $version"
+                gh variable set FLEXISIP_ALPHA_VERSION --body "$version" --repo ${{ github.repository }}
+                ;;
+              "beta")
+                echo "Updating FLEXISIP_BETA_VERSION to $version"
+                gh variable set FLEXISIP_BETA_VERSION --body "$version" --repo ${{ github.repository }}
+                ;;
+            esac
+          done
+
+          echo "✅ Variables updated successfully"
+
+  summary:
+    name: Build Summary
+    needs: [check-versions, build-versions, update-state]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🔍 Upstream Check Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.check-versions.outputs.has_builds }}" == "true" ]]; then
+            echo "### ✅ Builds Triggered" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```json' >> $GITHUB_STEP_SUMMARY
+            echo '${{ needs.check-versions.outputs.build_matrix }}' | jq '.' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            BUILD_RESULT="${{ needs.build-versions.result }}"
+            if [[ "$BUILD_RESULT" == "success" ]]; then
+              echo "### ✅ All builds completed successfully" >> $GITHUB_STEP_SUMMARY
+              UPDATE_RESULT="${{ needs.update-state.result }}"
+              if [[ "$UPDATE_RESULT" == "success" ]]; then
+                echo "### ✅ Variables updated successfully" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "### ⚠️ Variable update status: $UPDATE_RESULT" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              echo "### ⚠️ Build status: $BUILD_RESULT" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "### ℹ️ No new versions to build" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "All versions are up to date." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "Workflow completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY

@@ -1,16 +1,22 @@
-name: Build Docker images
+name: Docker Image Build
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       flexisip_version:
+        type: string
         description: "Flexisip version"
         required: true
-        default: "2.6.0-alpha"
-      debian_version:
-        description: "Debian version"
-        required: true
-        default: "trixie"
+      channel:
+        type: string
+        description: "Release channel (stable/alpha/beta)"
+        required: false
+        default: "stable"
+      tag_latest:
+        type: boolean
+        description: "Tag this version as latest"
+        required: false
+        default: false
   # push:
   #   branches:
   #     - main
@@ -54,8 +60,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           build-args: |
-            DEBIAN_VERSION=${{ github.event.inputs.debian_version }}
-            FLEXISIP_VERSION=${{ github.event.inputs.flexisip_version }}
+            DEBIAN_VERSION=trixie
+            FLEXISIP_VERSION=${{ inputs.flexisip_version }}
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,"name=${{ env.DOCKERHUB_REPO }}",push-by-digest=true,name-canonical=true,push=true
@@ -106,8 +112,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           build-args: |
-            DEBIAN_VERSION=${{ github.event.inputs.debian_version }}
-            FLEXISIP_VERSION=${{ github.event.inputs.flexisip_version }}
+            DEBIAN_VERSION=trixie
+            FLEXISIP_VERSION=${{ inputs.flexisip_version }}
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,"name=${{ env.DOCKERHUB_REPO }}",push-by-digest=true,name-canonical=true,push=true
@@ -155,10 +161,10 @@ jobs:
           images: |
             ${{ env.DOCKERHUB_REPO }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ inputs.flexisip_version }}
+            type=raw,value=latest,enable=${{ inputs.tag_latest }}
+            type=raw,value=alpha,enable=${{ inputs.channel == 'alpha' }}
+            type=raw,value=beta,enable=${{ inputs.channel == 'beta' }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests

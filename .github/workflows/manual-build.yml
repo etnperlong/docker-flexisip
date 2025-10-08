@@ -1,0 +1,39 @@
+name: Manual Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      flexisip_version:
+        description: 'Flexisip version to build (e.g., 2.3.0, 2.4.0-alpha.1)'
+        required: true
+        type: string
+
+jobs:
+  determine-channel:
+    name: Determine Build Channel
+    runs-on: ubuntu-24.04
+    outputs:
+      channel: ${{ steps.detect.outputs.channel }}
+    steps:
+      - name: Detect channel from version
+        id: detect
+        run: |
+          VERSION="${{ inputs.flexisip_version }}"
+          if [[ "$VERSION" == *"-alpha"* ]]; then
+            echo "channel=alpha" >> $GITHUB_OUTPUT
+          elif [[ "$VERSION" == *"-beta"* ]]; then
+            echo "channel=beta" >> $GITHUB_OUTPUT
+          else
+            echo "channel=stable" >> $GITHUB_OUTPUT
+          fi
+          echo "Detected channel: $(cat $GITHUB_OUTPUT | grep channel | cut -d= -f2)"
+
+  build:
+    name: Build Docker Image
+    needs: determine-channel
+    uses: ./.github/workflows/build-docker.yml
+    with:
+      flexisip_version: ${{ inputs.flexisip_version }}
+      channel: ${{ needs.determine-channel.outputs.channel }}
+      tag_latest: false
+    secrets: inherit
