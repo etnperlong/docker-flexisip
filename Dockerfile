@@ -1,5 +1,6 @@
 ARG DEBIAN_VERSION=trixie
 ARG FLEXISIP_VERSION
+ARG FLEXISIP_BRANCH=master
 ARG BUILD_TYPE=Release
 
 ##############
@@ -9,6 +10,7 @@ FROM debian:${DEBIAN_VERSION} AS build
 
 # Re-declare ARGs for use in this stage
 ARG FLEXISIP_VERSION
+ARG FLEXISIP_BRANCH
 ARG BUILD_TYPE
 
 # Install dependencies
@@ -82,9 +84,19 @@ RUN wget https://github.com/nghttp2/nghttp2/releases/download/v1.51.0/nghttp2-1.
   cd - && \
   rm -rf nghttp2-1.51.0.tar.gz nghttp2-1.51.0
 
-# Clone Flexisip sources at specific version
-RUN git clone --depth 1 --branch "${FLEXISIP_VERSION}" --recurse-submodules \
-    https://gitlab.linphone.org/BC/public/flexisip.git /flexisip && \
+# Clone Flexisip sources at specific version or commit
+RUN if echo "${FLEXISIP_VERSION}" | grep -qE '^[0-9a-f]{40}$'; then \
+      # For commit hash: clone branch first, then checkout specific commit \
+      git clone --branch "${FLEXISIP_BRANCH}" \
+        https://gitlab.linphone.org/BC/public/flexisip.git /flexisip && \
+      cd /flexisip && \
+      git checkout "${FLEXISIP_VERSION}" && \
+      git submodule update --init --recursive; \
+    else \
+      # For version tags: use shallow clone with --branch \
+      git clone --depth 1 --branch "${FLEXISIP_VERSION}" --recurse-submodules \
+        https://gitlab.linphone.org/BC/public/flexisip.git /flexisip; \
+    fi && \
   cd /flexisip && \
   echo "=== Flexisip Version ===" && \
   echo "Version: $(git describe --tags --always)" && \
