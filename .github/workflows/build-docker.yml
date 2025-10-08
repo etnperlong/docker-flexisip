@@ -5,16 +5,21 @@ on:
     inputs:
       flexisip_version:
         type: string
-        description: "Flexisip version"
+        description: "Flexisip version or commit hash"
         required: true
       channel:
         type: string
-        description: "Release channel (stable/alpha/beta)"
+        description: "Release channel (stable/alpha/beta/edge)"
         required: false
         default: "stable"
       tag_latest:
         type: boolean
         description: "Tag this version as latest"
+        required: false
+        default: false
+      is_commit:
+        type: boolean
+        description: "Whether flexisip_version is a commit hash (true) or tag (false)"
         required: false
         default: false
   # push:
@@ -161,10 +166,11 @@ jobs:
           images: |
             ${{ env.DOCKERHUB_REPO }}
           tags: |
-            type=raw,value=${{ inputs.flexisip_version }}
+            type=raw,value=${{ inputs.is_commit == true && format('edge-{0}', inputs.flexisip_version) || inputs.flexisip_version }}
             type=raw,value=latest,enable=${{ inputs.tag_latest }}
             type=raw,value=alpha,enable=${{ inputs.channel == 'alpha' }}
             type=raw,value=beta,enable=${{ inputs.channel == 'beta' }}
+            type=raw,value=edge,enable=${{ inputs.channel == 'edge' }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests

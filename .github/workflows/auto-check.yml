@@ -16,6 +16,7 @@ on:
           - stable
           - alpha
           - beta
+          - edge
 
 permissions:
   contents: write # Allow writing to repository contents (for pushing tags)
@@ -39,15 +40,18 @@ jobs:
           CURRENT_STABLE="${{ vars.FLEXISIP_STABLE_VERSION }}"
           CURRENT_ALPHA="${{ vars.FLEXISIP_ALPHA_VERSION }}"
           CURRENT_BETA="${{ vars.FLEXISIP_BETA_VERSION }}"
+          CURRENT_EDGE="${{ vars.FLEXISIP_EDGE_COMMIT }}"
 
           echo "current_stable=${CURRENT_STABLE:-}" >> $GITHUB_OUTPUT
           echo "current_alpha=${CURRENT_ALPHA:-}" >> $GITHUB_OUTPUT
           echo "current_beta=${CURRENT_BETA:-}" >> $GITHUB_OUTPUT
+          echo "current_edge=${CURRENT_EDGE:-}" >> $GITHUB_OUTPUT
 
           echo "Current versions:"
           echo "  Stable: ${CURRENT_STABLE:-none}"
           echo "  Alpha: ${CURRENT_ALPHA:-none}"
           echo "  Beta: ${CURRENT_BETA:-none}"
+          echo "  Edge: ${CURRENT_EDGE:-none}"
 
       - name: Fetch upstream tags and compare
         id: check
@@ -59,12 +63,14 @@ jobs:
           CHECK_STABLE=false
           CHECK_ALPHA=false
           CHECK_BETA=false
+          CHECK_EDGE=false
 
           case "$CHANNELS" in
             "all")
               CHECK_STABLE=true
               CHECK_ALPHA=true
               CHECK_BETA=true
+              CHECK_EDGE=true
               ;;
             "stable")
               CHECK_STABLE=true
@@ -75,9 +81,12 @@ jobs:
             "beta")
               CHECK_BETA=true
               ;;
+            "edge")
+              CHECK_EDGE=true
+              ;;
           esac
 
-          echo "Checking channels - stable:$CHECK_STABLE alpha:$CHECK_ALPHA beta:$CHECK_BETA"
+          echo "Checking channels - stable:$CHECK_STABLE alpha:$CHECK_ALPHA beta:$CHECK_BETA edge:$CHECK_EDGE"
 
           # Fetch all tags from GitLab
           echo "Fetching tags from GitLab..."
@@ -123,13 +132,28 @@ jobs:
           echo "  Alpha: ${LATEST_ALPHA:-none}"
           echo "  Beta: ${LATEST_BETA:-none}"
 
+          # Fetch latest commit from master branch for edge
+          LATEST_EDGE=""
+          if [[ "$CHECK_EDGE" == "true" ]]; then
+            echo "Fetching latest commit from master branch..."
+            LATEST_EDGE=$(curl -s "https://gitlab.linphone.org/api/v4/projects/${{ env.GITLAB_PROJECT_ID }}/repository/branches/master" | jq -r '.commit.id')
+            if [[ -z "$LATEST_EDGE" ]] || [[ "$LATEST_EDGE" == "null" ]]; then
+              echo "Warning: Failed to fetch master branch commit"
+              LATEST_EDGE=""
+            else
+              echo "  Edge (master): ${LATEST_EDGE:0:8}"
+            fi
+          fi
+
           # Set outputs
           echo "latest_stable=${LATEST_STABLE}" >> $GITHUB_OUTPUT
           echo "latest_alpha=${LATEST_ALPHA}" >> $GITHUB_OUTPUT
           echo "latest_beta=${LATEST_BETA}" >> $GITHUB_OUTPUT
+          echo "latest_edge=${LATEST_EDGE}" >> $GITHUB_OUTPUT
           echo "check_stable=${CHECK_STABLE}" >> $GITHUB_OUTPUT
           echo "check_alpha=${CHECK_ALPHA}" >> $GITHUB_OUTPUT
           echo "check_beta=${CHECK_BETA}" >> $GITHUB_OUTPUT
+          echo "check_edge=${CHECK_EDGE}" >> $GITHUB_OUTPUT
 
       - name: Prepare build matrix
         id: prepare
@@ -137,14 +161,17 @@ jobs:
           CURRENT_STABLE="${{ steps.current-state.outputs.current_stable }}"
           CURRENT_ALPHA="${{ steps.current-state.outputs.current_alpha }}"
           CURRENT_BETA="${{ steps.current-state.outputs.current_beta }}"
+          CURRENT_EDGE="${{ steps.current-state.outputs.current_edge }}"
 
           LATEST_STABLE="${{ steps.check.outputs.latest_stable }}"
           LATEST_ALPHA="${{ steps.check.outputs.latest_alpha }}"
           LATEST_BETA="${{ steps.check.outputs.latest_beta }}"
+          LATEST_EDGE="${{ steps.check.outputs.latest_edge }}"
 
           CHECK_STABLE="${{ steps.check.outputs.check_stable }}"
           CHECK_ALPHA="${{ steps.check.outputs.check_alpha }}"
           CHECK_BETA="${{ steps.check.outputs.check_beta }}"
+          CHECK_EDGE="${{ steps.check.outputs.check_edge }}"
 
           # Build matrix JSON
           MATRIX_INCLUDE="[]"
@@ -152,19 +179,25 @@ jobs:
           # Check stable
           if [[ "$CHECK_STABLE" == "true" ]] && [[ -n "$LATEST_STABLE" ]] && [[ "$LATEST_STABLE" != "$CURRENT_STABLE" ]]; then
             echo "✅ Stable version needs build: $CURRENT_STABLE -> $LATEST_STABLE"
-            MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. += [{"channel": "stable", "version": "'"$LATEST_STABLE"'", "tag_latest": true}]')
+            MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. += [{"channel": "stable", "version": "'"$LATEST_STABLE"'", "tag_latest": true, "is_commit": false}]')
           fi
 
           # Check alpha
           if [[ "$CHECK_ALPHA" == "true" ]] && [[ -n "$LATEST_ALPHA" ]] && [[ "$LATEST_ALPHA" != "$CURRENT_ALPHA" ]]; then
             echo "✅ Alpha version needs build: $CURRENT_ALPHA -> $LATEST_ALPHA"
-            MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. += [{"channel": "alpha", "version": "'"$LATEST_ALPHA"'", "tag_latest": false}]')
+            MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. += [{"channel": "alpha", "version": "'"$LATEST_ALPHA"'", "tag_latest": false, "is_commit": false}]')
           fi
 
           # Check beta
           if [[ "$CHECK_BETA" == "true" ]] && [[ -n "$LATEST_BETA" ]] && [[ "$LATEST_BETA" != "$CURRENT_BETA" ]]; then
             echo "✅ Beta version needs build: $CURRENT_BETA -> $LATEST_BETA"
-            MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. += [{"channel": "beta", "version": "'"$LATEST_BETA"'", "tag_latest": false}]')
+            MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. += [{"channel": "beta", "version": "'"$LATEST_BETA"'", "tag_latest": false, "is_commit": false}]')
+          fi
+
+          # Check edge (master branch)
+          if [[ "$CHECK_EDGE" == "true" ]] && [[ -n "$LATEST_EDGE" ]] && [[ "$LATEST_EDGE" != "$CURRENT_EDGE" ]]; then
+            echo "✅ Edge version needs build: ${CURRENT_EDGE:0:8} -> ${LATEST_EDGE:0:8}"
+            MATRIX_INCLUDE=$(echo "$MATRIX_INCLUDE" | jq -c '. += [{"channel": "edge", "version": "'"$LATEST_EDGE"'", "tag_latest": false, "is_commit": true}]')
           fi
 
           # Check if we have any builds
@@ -195,6 +228,7 @@ jobs:
       flexisip_version: ${{ matrix.version }}
       channel: ${{ matrix.channel }}
       tag_latest: ${{ matrix.tag_latest }}
+      is_commit: ${{ matrix.is_commit }}
     secrets: inherit
 
   update-state:
@@ -230,6 +264,10 @@ jobs:
               "beta")
                 echo "Updating FLEXISIP_BETA_VERSION to $version"
                 gh variable set FLEXISIP_BETA_VERSION --body "$version" --repo ${{ github.repository }}
+                ;;
+              "edge")
+                echo "Updating FLEXISIP_EDGE_COMMIT to $version"
+                gh variable set FLEXISIP_EDGE_COMMIT --body "$version" --repo ${{ github.repository }}
                 ;;
             esac
           done
