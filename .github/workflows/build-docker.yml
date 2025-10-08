@@ -75,7 +75,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-linux-amd64
+          name: digests-linux-amd64-${{ inputs.flexisip_version }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -127,7 +127,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-linux-arm64
+          name: digests-linux-arm64-${{ inputs.flexisip_version }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -142,7 +142,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
-          pattern: digests-*
+          pattern: digests-*-${{ inputs.flexisip_version }}
           merge-multiple: true
 
       - name: Login to Docker Hub
