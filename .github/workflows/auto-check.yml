@@ -236,8 +236,6 @@ jobs:
     needs: [check-versions, build-versions]
     if: always() && needs.check-versions.outputs.has_builds == 'true' && needs.build-versions.result == 'success'
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
     steps:
       - name: Update GitHub Variables
         env:
