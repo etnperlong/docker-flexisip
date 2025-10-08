@@ -107,7 +107,7 @@ RUN apt-get -y update \
   && apt-get install -y --no-install-recommends /tmp/*.deb \
   && apt-get -y autoremove \
   && apt-get -y clean \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* /tmp/*.deb
 
 EXPOSE 5060/udp
 EXPOSE 5060/tcp
