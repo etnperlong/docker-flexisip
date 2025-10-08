@@ -17,6 +17,10 @@ on:
           - alpha
           - beta
 
+permissions:
+  contents: write # Allow writing to repository contents (for pushing tags)
+  actions: write # Allows triggering actions
+
 env:
   GITLAB_PROJECT_ID: 'BC%2Fpublic%2Fflexisip'
 
