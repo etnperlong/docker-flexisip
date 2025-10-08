@@ -1,11 +1,15 @@
 ARG DEBIAN_VERSION=trixie
-ARG FLEXISIP_VERSION=2.6.0-alpha
+ARG FLEXISIP_VERSION
 ARG BUILD_TYPE=Release
 
 ##############
 # Build stage
 ##############
 FROM debian:${DEBIAN_VERSION} AS build
+
+# Re-declare ARGs for use in this stage
+ARG FLEXISIP_VERSION
+ARG BUILD_TYPE
 
 # Install dependencies
 RUN apt-get -y update \
@@ -78,11 +82,14 @@ RUN wget https://github.com/nghttp2/nghttp2/releases/download/v1.51.0/nghttp2-1.
   cd - && \
   rm -rf nghttp2-1.51.0.tar.gz nghttp2-1.51.0
 
-# Checkout Flexisip sources
-RUN git clone https://gitlab.linphone.org/BC/public/flexisip.git /flexisip && \
+# Clone Flexisip sources at specific version
+RUN git clone --depth 1 --branch "${FLEXISIP_VERSION}" --recurse-submodules \
+    https://gitlab.linphone.org/BC/public/flexisip.git /flexisip && \
   cd /flexisip && \
-  git checkout ${FLEXISIP_VERSION} && \
-  git submodule update --init --recursive
+  echo "=== Flexisip Version ===" && \
+  echo "Version: $(git describe --tags --always)" && \
+  echo "=== Submodule Status ===" && \
+  git submodule status | head -5
 
 # Build debian package
 WORKDIR /flexisip
