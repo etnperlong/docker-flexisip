@@ -213,7 +213,8 @@ cd docker-flexisip
 Navigate to **Settings → Secrets and variables → Actions**
 
 **Required Secrets**:
-- `DOCKERHUB_TOKEN`: Your Docker Hub access token
+- `DOCKERHUB_TOKEN`: Your Docker Hub access token ([How to create](https://docs.docker.com/security/for-developers/access-tokens/))
+- `PAT`: GitHub Personal Access Token with `variables:write` permission
 
 **Required Variables**:
 - `DOCKERHUB_USERNAME`: Your Docker Hub username
@@ -221,6 +222,37 @@ Navigate to **Settings → Secrets and variables → Actions**
 - `FLEXISIP_ALPHA_VERSION`: Current alpha version (leave empty initially)
 - `FLEXISIP_BETA_VERSION`: Current beta version (leave empty initially)
 - `FLEXISIP_EDGE_COMMIT`: Current edge commit hash (leave empty initially)
+
+##### Creating the GitHub Personal Access Token (PAT)
+
+The auto-check workflow requires a Personal Access Token to update repository variables because the default `GITHUB_TOKEN` doesn't support this operation.
+
+1. **Go to GitHub Settings**:
+   - Click your profile picture → **Settings**
+   - Navigate to **Developer settings** → **Personal access tokens** → **Fine-grained tokens**
+   - Click **Generate new token**
+
+2. **Configure Token**:
+   - **Token name**: `docker-flexisip-variables` (or any descriptive name)
+   - **Expiration**: Choose your preferred duration (90 days or custom)
+   - **Repository access**: Select "Only select repositories" and choose your fork
+   - **Permissions** → **Repository permissions**:
+     - **Variables**: Set to **Read and write** access
+     - **Actions**: Set to **Read-only** access (optional, for workflow runs)
+
+3. **Generate and Save**:
+   - Click **Generate token**
+   - **Important**: Copy the token immediately - you won't see it again!
+   - Store it in your repository secrets as `PAT`
+
+4. **Add to Repository Secrets**:
+   - Go to your repository → **Settings** → **Secrets and variables** → **Actions**
+   - Click **New repository secret**
+   - Name: `PAT`
+   - Value: Paste your generated token
+   - Click **Add secret**
+
+> **Why is this needed?** The GitHub Actions default `GITHUB_TOKEN` has limited permissions and cannot modify repository variables. A fine-grained PAT with explicit `variables:write` permission is required for the auto-check workflow to update version tracking variables after successful builds.
 
 #### Step 3: Configure Runners (Optional)
 
@@ -249,15 +281,6 @@ Go to **Actions** tab and enable workflows for your fork.
 Actions → Manual Build → Run workflow
 Input version: 2.3.2
 ```
-
-### Workflow Configuration
-
-Detailed workflow documentation is available in [`.github/workflows/README.md`](.github/workflows/README.md), including:
-- Input parameters and options
-- Tagging strategies
-- Version detection rules
-- Troubleshooting guides
-- Performance optimization tips
 
 ## 📊 Comparison with Official Images
 

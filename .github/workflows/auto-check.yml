@@ -239,7 +239,9 @@ jobs:
     steps:
       - name: Update GitHub Variables
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use PAT with 'variables:write' permission instead of GITHUB_TOKEN
+          # GITHUB_TOKEN doesn't support repository variables modification
+          GH_TOKEN: ${{ secrets.PAT }}
         run: |
           # Parse matrix to get version info
           MATRIX='${{ needs.check-versions.outputs.build_matrix }}'
