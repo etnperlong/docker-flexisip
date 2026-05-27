@@ -62,6 +62,7 @@ RUN apt-get -y update \
   libspeex-dev \
   libspeexdsp-dev \
   libxml2-dev \
+  libsystemd-dev \
   redis-server \
   # Dev Dependencies of the B2BUA
   libvpx-dev \
