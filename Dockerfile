@@ -89,14 +89,14 @@ RUN wget https://github.com/nghttp2/nghttp2/releases/download/v1.51.0/nghttp2-1.
 RUN if echo "${FLEXISIP_VERSION}" | grep -qE '^[0-9a-f]{40}$'; then \
       # For commit hash: clone branch first, then checkout specific commit \
       git clone --branch "${FLEXISIP_BRANCH}" \
-        https://github.com/BelledonneCommunications/flexisip.git /flexisip && \
+        https://gitlab.linphone.org/BC/public/flexisip.git /flexisip && \
       cd /flexisip && \
       git checkout "${FLEXISIP_VERSION}" && \
       git submodule update --init --recursive; \
     else \
       # For version tags: use shallow clone with --branch \
       git clone --depth 1 --branch "${FLEXISIP_VERSION}" --recurse-submodules \
-        https://github.com/BelledonneCommunications/flexisip.git /flexisip; \
+        https://gitlab.linphone.org/BC/public/flexisip.git /flexisip; \
     fi && \
   cd /flexisip && \
   echo "=== Flexisip Version ===" && \
