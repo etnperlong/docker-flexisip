@@ -13,6 +13,8 @@ ARG FLEXISIP_VERSION
 ARG FLEXISIP_BRANCH
 ARG BUILD_TYPE
 
+COPY --chmod=755 scripts/retry.sh /usr/local/bin/retry
+
 # Install dependencies
 RUN apt-get -y update \
   && apt-get -y install \
@@ -71,6 +73,11 @@ RUN apt-get -y update \
   && apt-get -y clean \
   && rm -rf /var/lib/apt/lists/*
 
+# Prefer HTTP/1.1 and lower fetch concurrency for flaky upstream GitLab access.
+RUN git config --global http.version HTTP/1.1 \
+  && git config --global http.maxRequests 2 \
+  && git config --global submodule.fetchJobs 1
+
 # Install dependencies from external sources
 # Install libnghttp2_asio
 # Downloading the gz source and not bz2 to avoid installing bzip2.
@@ -88,15 +95,16 @@ RUN wget https://github.com/nghttp2/nghttp2/releases/download/v1.51.0/nghttp2-1.
 # Clone Flexisip sources at specific version or commit
 RUN if echo "${FLEXISIP_VERSION}" | grep -qE '^[0-9a-f]{40}$'; then \
       # For commit hash: clone branch first, then checkout specific commit \
-      git clone --branch "${FLEXISIP_BRANCH}" \
-        https://gitlab.linphone.org/BC/public/flexisip.git /flexisip && \
+      retry --attempts 5 --delay 5 --max-delay 30 -- \
+        sh -c "rm -rf /flexisip && git clone --branch \"${FLEXISIP_BRANCH}\" --single-branch https://gitlab.linphone.org/BC/public/flexisip.git /flexisip" && \
       cd /flexisip && \
       git checkout "${FLEXISIP_VERSION}" && \
-      git submodule update --init --recursive; \
+      retry --attempts 5 --delay 5 --max-delay 30 -- \
+        git submodule update --init --recursive --jobs 1; \
     else \
       # For version tags: use shallow clone with --branch \
-      git clone --depth 1 --branch "${FLEXISIP_VERSION}" --recurse-submodules \
-        https://gitlab.linphone.org/BC/public/flexisip.git /flexisip; \
+      retry --attempts 5 --delay 5 --max-delay 30 -- \
+        sh -c "rm -rf /flexisip && git clone --depth 1 --branch \"${FLEXISIP_VERSION}\" --single-branch --recurse-submodules --shallow-submodules --jobs 1 https://gitlab.linphone.org/BC/public/flexisip.git /flexisip"; \
     fi && \
   cd /flexisip && \
   echo "=== Flexisip Version ===" && \
