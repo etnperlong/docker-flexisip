@@ -104,7 +104,10 @@ RUN if echo "${FLEXISIP_VERSION}" | grep -qE '^[0-9a-f]{40}$'; then \
     else \
       # For version tags: use shallow clone with --branch \
       retry --attempts 5 --delay 5 --max-delay 30 -- \
-        sh -c "rm -rf /flexisip && git clone --depth 1 --branch \"${FLEXISIP_VERSION}\" --single-branch --recurse-submodules --shallow-submodules --jobs 1 https://gitlab.linphone.org/BC/public/flexisip.git /flexisip"; \
+        sh -c "rm -rf /flexisip && git clone --depth 1 --branch \"${FLEXISIP_VERSION}\" --single-branch https://gitlab.linphone.org/BC/public/flexisip.git /flexisip" && \
+      cd /flexisip && \
+      retry --attempts 5 --delay 5 --max-delay 30 -- \
+        git submodule update --init --recursive --jobs 1 --no-recommend-shallow; \
     fi && \
   cd /flexisip && \
   echo "=== Flexisip Version ===" && \
