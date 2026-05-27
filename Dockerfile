@@ -104,6 +104,11 @@ RUN if echo "${FLEXISIP_VERSION}" | grep -qE '^[0-9a-f]{40}$'; then \
   echo "=== Submodule Status ===" && \
   git submodule status | head -5
 
+# Fix: remove bc-flexisip-conference dependency incorrectly introduced in 2.6.x-beta and 2.7.x-alpha.
+# No-op for versions that don't have this line.
+# See: https://github.com/BelledonneCommunications/flexisip/commit/0eea36b1d4a7a6544644e0126053bc1f453586ce
+RUN sed -i '/# Add bc-flexisip-conference/d; /"bc-flexisip-conference"/d' /flexisip/packaging/CMakeLists.txt
+
 # Build debian package
 WORKDIR /flexisip
 RUN export CC="ccache clang" && export CXX="ccache clang++" && \
