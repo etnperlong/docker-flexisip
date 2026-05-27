@@ -231,52 +231,9 @@ jobs:
       is_commit: ${{ matrix.is_commit }}
     secrets: inherit
 
-  update-state:
-    name: Update Build State
-    needs: [check-versions, build-versions]
-    if: always() && needs.check-versions.outputs.has_builds == 'true' && needs.build-versions.result == 'success'
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Update GitHub Variables
-        env:
-          # Use PAT with 'variables:write' permission instead of GITHUB_TOKEN
-          # GITHUB_TOKEN doesn't support repository variables modification
-          GH_TOKEN: ${{ secrets.PAT }}
-        run: |
-          # Parse matrix to get version info
-          MATRIX='${{ needs.check-versions.outputs.build_matrix }}'
-          echo "Processing build results..."
-          echo "$MATRIX" | jq '.'
-
-          echo "✅ All builds completed successfully, updating variables..."
-
-          # Update variables for each successful build
-          echo "$MATRIX" | jq -r '.include[] | "\(.channel)=\(.version)"' | while IFS='=' read -r channel version; do
-            case "$channel" in
-              "stable")
-                echo "Updating FLEXISIP_STABLE_VERSION to $version"
-                gh variable set FLEXISIP_STABLE_VERSION --body "$version" --repo ${{ github.repository }}
-                ;;
-              "alpha")
-                echo "Updating FLEXISIP_ALPHA_VERSION to $version"
-                gh variable set FLEXISIP_ALPHA_VERSION --body "$version" --repo ${{ github.repository }}
-                ;;
-              "beta")
-                echo "Updating FLEXISIP_BETA_VERSION to $version"
-                gh variable set FLEXISIP_BETA_VERSION --body "$version" --repo ${{ github.repository }}
-                ;;
-              "edge")
-                echo "Updating FLEXISIP_EDGE_COMMIT to $version"
-                gh variable set FLEXISIP_EDGE_COMMIT --body "$version" --repo ${{ github.repository }}
-                ;;
-            esac
-          done
-
-          echo "✅ Variables updated successfully"
-
   summary:
     name: Build Summary
-    needs: [check-versions, build-versions, update-state]
+    needs: [check-versions, build-versions]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -296,14 +253,8 @@ jobs:
             BUILD_RESULT="${{ needs.build-versions.result }}"
             if [[ "$BUILD_RESULT" == "success" ]]; then
               echo "### ✅ All builds completed successfully" >> $GITHUB_STEP_SUMMARY
-              UPDATE_RESULT="${{ needs.update-state.result }}"
-              if [[ "$UPDATE_RESULT" == "success" ]]; then
-                echo "### ✅ Variables updated successfully" >> $GITHUB_STEP_SUMMARY
-              else
-                echo "### ⚠️ Variable update status: $UPDATE_RESULT" >> $GITHUB_STEP_SUMMARY
-              fi
             else
-              echo "### ⚠️ Build status: $BUILD_RESULT" >> $GITHUB_STEP_SUMMARY
+              echo "### ⚠️ Build status: $BUILD_RESULT (successfully built versions have had their state updated)" >> $GITHUB_STEP_SUMMARY
             fi
           else
             echo "### ℹ️ No new versions to build" >> $GITHUB_STEP_SUMMARY

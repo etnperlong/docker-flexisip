@@ -181,3 +181,23 @@ jobs:
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.DOCKERHUB_REPO }}:${{ steps.meta.outputs.version }}
+
+      - name: Update build state
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          case "${{ inputs.channel }}" in
+            "stable")
+              gh variable set FLEXISIP_STABLE_VERSION --body "${{ inputs.flexisip_version }}" --repo ${{ github.repository }}
+              ;;
+            "alpha")
+              gh variable set FLEXISIP_ALPHA_VERSION --body "${{ inputs.flexisip_version }}" --repo ${{ github.repository }}
+              ;;
+            "beta")
+              gh variable set FLEXISIP_BETA_VERSION --body "${{ inputs.flexisip_version }}" --repo ${{ github.repository }}
+              ;;
+            "edge")
+              gh variable set FLEXISIP_EDGE_COMMIT --body "${{ inputs.flexisip_version }}" --repo ${{ github.repository }}
+              ;;
+          esac
+          echo "Updated state for ${{ inputs.channel }}: ${{ inputs.flexisip_version }}"
